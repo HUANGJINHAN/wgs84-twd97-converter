@@ -1,0 +1,134 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>WGS84 ➔ TWD97 批次座標轉換器</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 400px; margin-top: 20px; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
+  <div class="bg-white shadow-lg rounded-2xl p-6 w-full max-w-5xl">
+    <h1 class="text-2xl font-bold mb-4 text-center">WGS84 ➔ TWD97 批次座標轉換器</h1>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block font-medium mb-2">貼上經緯度（每行一筆：經度,緯度）</label>
+        <textarea id="input" rows="8" class="border rounded-lg w-full p-2" placeholder="例如：121.000000,24.000000"></textarea>
+      </div>
+      <div>
+        <label class="block font-medium mb-2">或上傳CSV檔（欄位：經度,緯度）</label>
+        <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-600">
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-4 justify-center mb-6">
+      <button onclick="convertBatch()" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600">轉換</button>
+      <button onclick="downloadCSV()" class="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600">下載CSV</button>
+    </div>
+    <div id="result" class="overflow-auto"></div>
+    <h2 class="text-xl font-semibold mt-8 mb-2">地圖預覽</h2>
+    <div id="map" class="rounded-lg shadow"></div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let convertedData = [];
+    function convertWGS84toTWD97(lon, lat) {
+      const a = 6378137.0;
+      const b = 6356752.314245;
+      const long0 = 121 * Math.PI / 180;
+      const k0 = 0.9999;
+      const dx = 250000;
+      const e = Math.pow((1 - Math.pow(b,2)/Math.pow(a,2)), 0.5);
+      const lat_rad = lat * Math.PI / 180;
+      const lon_rad = lon * Math.PI / 180;
+      const n = (a - b) / (a + b);
+      const A = a * (1 - n + (5/4)*(n*n - n*n*n) + (81/64)*(n*n*n*n));
+      const B = (3*a*n/2)*(1 - n + (7/8)*(n*n - n*n*n) + (55/64)*(n*n*n*n));
+      const C = (15*a*n*n/16)*(1 - n + (3/4)*(n*n - n*n*n));
+      const D = (35*a*n*n*n/48)*(1 - n + (11/16)*(n*n));
+      const E = (315*a*n*n*n*n/512)*(1 - n);
+      const S = A*lat_rad - B*Math.sin(2*lat_rad) + C*Math.sin(4*lat_rad) - D*Math.sin(6*lat_rad) + E*Math.sin(8*lat_rad);
+      const nu = a / Math.pow(1 - Math.pow(e * Math.sin(lat_rad),2), 0.5);
+      const p = lon_rad - long0;
+      const K1 = S * k0;
+      const K2 = k0 * nu * Math.sin(2*lat_rad) / 4;
+      const K3 = (k0 * nu * Math.sin(lat_rad) * Math.pow(Math.cos(lat_rad),3) / 24) *
+                 (5 - Math.pow(Math.tan(lat_rad),2) + 9 * Math.pow(e,2) * Math.pow(Math.cos(lat_rad),2) + 4 * Math.pow(e,4) * Math.pow(Math.cos(lat_rad),4));
+      const y = K1 + K2 * Math.pow(p,2) + K3 * Math.pow(p,4);
+      const K4 = k0 * nu * Math.cos(lat_rad);
+      const K5 = (k0 * nu * Math.pow(Math.cos(lat_rad),3) / 6) *
+                 (1 - Math.pow(Math.tan(lat_rad),2) + Math.pow(e,2) * Math.pow(Math.cos(lat_rad),2));
+      const x = dx + K4 * p + K5 * Math.pow(p,3);
+      return {x: x, y: y};
+    }
+    function convertBatch() {
+      convertedData = [];
+      const inputText = document.getElementById('input').value.trim();
+      const fileInput = document.getElementById('csvFile').files[0];
+      const lines = [];
+      if (inputText) {
+        inputText.split('
+').forEach(line => lines.push(line));
+      }
+      if (fileInput) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const content = e.target.result.split('
+');
+          content.forEach(line => lines.push(line));
+          processLines(lines);
+        };
+        reader.readAsText(fileInput);
+      } else {
+        processLines(lines);
+      }
+    }
+    function processLines(lines) {
+      let outputHtml = '<table class="min-w-full table-auto text-sm"><thead><tr class="bg-gray-200"><th class="px-4 py-2">經度</th><th class="px-4 py-2">緯度</th><th class="px-4 py-2">X (m)</th><th class="px-4 py-2">Y (m)</th></tr></thead><tbody>';
+      map.eachLayer(layer => {
+        if (layer instanceof L.Marker) map.removeLayer(layer);
+      });
+      lines.forEach(line => {
+        if (line.trim() !== '') {
+          const parts = line.split(',');
+          if (parts.length === 2) {
+            const lon = parseFloat(parts[0]);
+            const lat = parseFloat(parts[1]);
+            const result = convertWGS84toTWD97(lon, lat);
+            convertedData.push({lon, lat, x: result.x, y: result.y});
+            outputHtml += `<tr class="border-t"><td class="px-4 py-2">${lon}</td><td class="px-4 py-2">${lat}</td><td class="px-4 py-2">${result.x.toFixed(3)}</td><td class="px-4 py-2">${result.y.toFixed(3)}</td></tr>`;
+            L.marker([lat, lon]).addTo(map).bindPopup(`經緯度:<br>${lon},${lat}`);
+          }
+        }
+      });
+      outputHtml += '</tbody></table>';
+      document.getElementById('result').innerHTML = outputHtml;
+    }
+    function downloadCSV() {
+      if (convertedData.length === 0) {
+        alert("請先轉換座標！");
+        return;
+      }
+      let csv = '經度,緯度,X座標,Y座標
+';
+      convertedData.forEach(row => {
+        csv += `${row.lon},${row.lat},${row.x.toFixed(3)},${row.y.toFixed(3)}
+`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'twd97_coordinates.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    const map = L.map('map').setView([23.5, 121], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+  </script>
+</body>
+</html>
