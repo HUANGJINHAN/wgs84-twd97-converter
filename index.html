@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -11,8 +10,10 @@
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
+
   <div class="bg-white shadow-lg rounded-2xl p-6 w-full max-w-5xl">
     <h1 class="text-2xl font-bold mb-4 text-center">WGS84 ➔ TWD97 批次座標轉換器</h1>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
       <div>
         <label class="block font-medium mb-2">貼上經緯度（每行一筆：經度,緯度）</label>
@@ -23,17 +24,22 @@
         <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-600">
       </div>
     </div>
+
     <div class="flex flex-wrap gap-4 justify-center mb-6">
       <button onclick="convertBatch()" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600">轉換</button>
       <button onclick="downloadCSV()" class="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600">下載CSV</button>
     </div>
+
     <div id="result" class="overflow-auto"></div>
+
     <h2 class="text-xl font-semibold mt-8 mb-2">地圖預覽</h2>
     <div id="map" class="rounded-lg shadow"></div>
   </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     let convertedData = [];
+
     function convertWGS84toTWD97(lon, lat) {
       const a = 6378137.0;
       const b = 6356752.314245;
@@ -63,20 +69,21 @@
       const x = dx + K4 * p + K5 * Math.pow(p,3);
       return {x: x, y: y};
     }
+
     function convertBatch() {
       convertedData = [];
       const inputText = document.getElementById('input').value.trim();
       const fileInput = document.getElementById('csvFile').files[0];
       const lines = [];
+
       if (inputText) {
-        inputText.split('
-').forEach(line => lines.push(line));
+        inputText.split('\n').forEach(line => lines.push(line));
       }
+
       if (fileInput) {
         const reader = new FileReader();
         reader.onload = function(e) {
-          const content = e.target.result.split('
-');
+          const content = e.target.result.split('\n');
           content.forEach(line => lines.push(line));
           processLines(lines);
         };
@@ -85,11 +92,13 @@
         processLines(lines);
       }
     }
+
     function processLines(lines) {
       let outputHtml = '<table class="min-w-full table-auto text-sm"><thead><tr class="bg-gray-200"><th class="px-4 py-2">經度</th><th class="px-4 py-2">緯度</th><th class="px-4 py-2">X (m)</th><th class="px-4 py-2">Y (m)</th></tr></thead><tbody>';
       map.eachLayer(layer => {
         if (layer instanceof L.Marker) map.removeLayer(layer);
       });
+
       lines.forEach(line => {
         if (line.trim() !== '') {
           const parts = line.split(',');
@@ -103,20 +112,22 @@
           }
         }
       });
+
       outputHtml += '</tbody></table>';
       document.getElementById('result').innerHTML = outputHtml;
     }
+
     function downloadCSV() {
       if (convertedData.length === 0) {
         alert("請先轉換座標！");
         return;
       }
-      let csv = '經度,緯度,X座標,Y座標
-';
+
+      let csv = '經度,緯度,X座標,Y座標\n';
       convertedData.forEach(row => {
-        csv += `${row.lon},${row.lat},${row.x.toFixed(3)},${row.y.toFixed(3)}
-`;
+        csv += `${row.lon},${row.lat},${row.x.toFixed(3)},${row.y.toFixed(3)}\n`;
       });
+
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -125,10 +136,12 @@
       link.click();
       document.body.removeChild(link);
     }
+
     const map = L.map('map').setView([23.5, 121], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
   </script>
+
 </body>
 </html>
